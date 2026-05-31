@@ -1,0 +1,48 @@
+name: Build and Deploy Java WAR to Tomcat
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Download repository code
+        uses: actions/checkout@v4
+
+      - name: Set up Java 8
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '8'
+
+      - name: Build WAR file
+        working-directory: Java-Login-App
+        run: mvn clean package
+
+      - name: Copy WAR file to server
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.VM_HOST }}
+          username: deployer
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          source: "Java-Login-App/target/*.war"
+          target: "/tmp/java-deploy"
+
+      - name: Deploy WAR to Tomcat
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.VM_HOST }}
+          username: deployer
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          script: |
+            sudo rm -rf /opt/tomcat9/webapps/dptweb-1.0
+            sudo rm -f /opt/tomcat9/webapps/dptweb-1.0.war
+            sudo cp /tmp/java-deploy/Java-Login-App/target/*.war /opt/tomcat9/webapps/
+            sudo chown tomcat:tomcat /opt/tomcat9/webapps/*.war
+            sudo systemctl restart tomcat
+            sudo systemctl status tomcat --no-pager
